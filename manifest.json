@@ -1,0 +1,16 @@
+{
+  "name": "Audit Energetico",
+  "short_name": "AUDIT",
+  "description": "Compilazione e generazione di relazioni di audit energetico (fbc group).",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#5E35B1",
+  "theme_color": "#5E35B1",
+  "lang": "it",
+  "icons": [
+    { "src": "icona-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icona-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icona-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
