@@ -792,7 +792,7 @@
     "Carrelli elevatori":0.005,"Involucro edilizio":0.03,"HVAC / UTA":0.02,"Rete elettrica":0.005,
     "Flotta aziendale":0.03,"Monitoraggio":0.045,"Altro":0.015
   };
-  const interventiState = INTERVENTI_STANDARD.map(it => ({ eff:"N.A.", intervento:false, opportunita:"", investimento:0, tipo_override: it.area==="Altro"?"":null, kwp:0, prod:1150, autoc:70, pzonale:0 }));
+  const interventiState = INTERVENTI_STANDARD.map(it => ({ eff:"N.A.", intervento:false, opportunita:"", investimento:0, tipo_override: it.area==="Altro"?"":null, kwp:0, prod:1150, autoc:70, pzonale:0, complessita:3 }));
   // Fattori di emissione (kg CO2 per kWh da rete / Smc gas / litro gasolio) — assunzioni, modificabili
   const CO2 = { ee:0.3822, gas:1.98, gasolio:2.64 };  // EE rete: coeff. ISPRA 0,3822 ton/MWh = 0,3822 kg/kWh
 
@@ -989,6 +989,10 @@
       </table>
       <p class="muted">I risparmi sono calcolati statisticamente sulla base di interventi analoghi e possono non riflettere univocamente il caso in esame.</p>
 
+      <h3 style="margin-top:16px">Prioritizzazione degli interventi</h3>
+      <div class="chartCard"><div class="chartTitle">Tempo di ritorno vs Complessità — dimensione bolla = risparmio annuo [€]</div><div class="chartWrap"><canvas id="chartBolle"></canvas></div></div>
+      <p class="muted">Ogni bolla è un'area di intervento: in ascissa il <b>tempo di ritorno</b> (payback), in ordinata la <b>complessità</b> realizzativa (1–5) e con dimensione proporzionale al <b>risparmio economico annuo</b> stimato. Gli interventi più convenienti si collocano in basso a sinistra (ritorno rapido, bassa complessità). Sono rappresentati i soli interventi con investimento valorizzato.</p>
+
       <div class="sheet-foot"></div></div>
       <div class="sheet"><div class="pageHead"><img class="ph-logo" src="logo.png" alt="fbc group" onerror="this.style.display='none'"><span class="ph-doc">Audit energetico</span></div>
       <div class="nextSteps">
@@ -1098,8 +1102,17 @@
         <div style="margin-top:10px"><div class="lbl">Opportunità / commento</div>
           <textarea data-op="${idx}" placeholder="Note, criticità o opportunità (compilabile anche con efficienza Alta)…">${safe(st.opportunita)}</textarea>
         </div>
-        ${st.intervento?`<div style="margin-top:10px"><div class="lbl">Investimento stimato [€] — opzionale (per il payback)</div>
-          <input type="number" inputmode="decimal" step="100" min="0" data-inv="${idx}" value="${st.investimento||""}" placeholder="Es. 15000" /></div>`:""}
+        ${st.intervento?`<div class="iGrid" style="margin-top:10px">
+          <div><div class="lbl">Investimento stimato [€] — opz. (per il payback)</div>
+            <input type="number" inputmode="decimal" step="100" min="0" data-inv="${idx}" value="${st.investimento||""}" placeholder="Es. 15000" /></div>
+          <div><div class="lbl">Complessità (1–5) — per il grafico bolle</div>
+            <select data-cx="${idx}">
+              <option value="1" ${Number(st.complessita)===1?"selected":""}>1 — Molto bassa</option>
+              <option value="2" ${Number(st.complessita)===2?"selected":""}>2 — Bassa</option>
+              <option value="3" ${Number(st.complessita)===3?"selected":""}>3 — Media</option>
+              <option value="4" ${Number(st.complessita)===4?"selected":""}>4 — Alta</option>
+              <option value="5" ${Number(st.complessita)===5?"selected":""}>5 — Molto alta</option>
+            </select></div></div>`:""}
         ${(it.area==="Fotovoltaico" && st.intervento)?`
         <div class="iGrid" style="margin-top:10px">
           <div><div class="lbl">Potenza di picco [kW]</div><input type="number" inputmode="decimal" step="0.1" min="0" data-fv="kwp" data-i="${idx}" value="${st.kwp||""}" placeholder="Es. 100"/></div>
@@ -1120,6 +1133,8 @@
       wrap.querySelector(`textarea[data-op="${idx}"]`).addEventListener("input",(e)=>{ st.opportunita=e.target.value; render(); });
       const invEl=wrap.querySelector(`input[data-inv="${idx}"]`);
       if(invEl) invEl.addEventListener("input",(e)=>{ st.investimento=num(e.target.value); render(); });
+      const cxEl=wrap.querySelector(`select[data-cx="${idx}"]`);
+      if(cxEl) cxEl.addEventListener("change",(e)=>{ st.complessita=Math.min(5,Math.max(1,Number(e.target.value)||3)); render(); });
       wrap.querySelectorAll(`input[data-fv][data-i="${idx}"]`).forEach(el=>el.addEventListener("input",(e)=>{ st[e.target.dataset.fv]=num(e.target.value); render(); }));
       if(it.area==="Altro"){ wrap.querySelector(`select[data-tipo="${idx}"]`).addEventListener("change",(e)=>{ st.tipo_override=e.target.value; render(); }); }
     });
@@ -1201,7 +1216,7 @@
       const inv=Number(st.investimento)||0;
       const payback=(risp>0 && inv>0)?(inv/risp):null;
       total+=risp; invTot+=inv;
-      perArea.push({ area:it.area, tipo:(it.area==="Altro"?(st.tipo_override||""):it.tipo), risp, inv, payback });
+      perArea.push({ area:it.area, tipo:(it.area==="Altro"?(st.tipo_override||""):it.tipo), risp, inv, payback, complessita:Math.min(5,Math.max(1,Number(st.complessita)||3)) });
     });
     const pctTot=(costoTot>0)?(total/costoTot)*100:0;
     return { perArea, total, pctTot, invTot, savedEE, savedGas, savedGasolio };
@@ -1436,10 +1451,10 @@
   // =========================
   const HAS_CHART = (typeof Chart!=="undefined");
   if(HAS_CHART && typeof ChartDataLabels!=="undefined") Chart.register(ChartDataLabels);
-  let chartCostiConsumi=null, chartEffBar=null, chartEffDonut=null, chartEnergiaPrimaria=null, chartVettoriEnergetici=null, chartMensili=null;
+  let chartCostiConsumi=null, chartEffBar=null, chartEffDonut=null, chartEnergiaPrimaria=null, chartVettoriEnergetici=null, chartMensili=null, chartBolle=null;
   function destroyCharts(){
-    [chartCostiConsumi,chartEffBar,chartEffDonut,chartEnergiaPrimaria,chartVettoriEnergetici,chartMensili].forEach(c=>{ if(c) c.destroy(); });
-    chartCostiConsumi=chartEffBar=chartEffDonut=chartEnergiaPrimaria=chartVettoriEnergetici=chartMensili=null;
+    [chartCostiConsumi,chartEffBar,chartEffDonut,chartEnergiaPrimaria,chartVettoriEnergetici,chartMensili,chartBolle].forEach(c=>{ if(c) c.destroy(); });
+    chartCostiConsumi=chartEffBar=chartEffDonut=chartEnergiaPrimaria=chartVettoriEnergetici=chartMensili=chartBolle=null;
   }
   const htmlLegendPlugin={ id:"htmlLegend", afterUpdate(chart,args,options){
     const container=document.getElementById(options.containerID); if(!container) return;
@@ -1523,6 +1538,40 @@
             x:{ grid:{display:false} }
           } }
       });
+    }
+
+    const bbEl=document.getElementById("chartBolle");
+    if(bbEl && r.risparmi){
+      const items=r.risparmi.perArea.filter(a=>a.payback!=null && a.risp>0);
+      if(items.length){
+        const maxRisp=Math.max(...items.map(a=>a.risp));
+        const maxPay=Math.max(...items.map(a=>a.payback));
+        const PALETTE=["#4f6fae","#2bb673","#0F5B6E","#E8742B","#7E57C2","#FFC000","#4f5d8a","#8BD96B","#C0504D","#5E35B1","#1f9bb3","#9C6ADE"];
+        const RMIN=10, RMAX=42;
+        const pts=items.map((a,i)=>({
+          x:Math.round(a.payback*10)/10,
+          y:Math.min(5,Math.max(1,Number(a.complessita)||3)),
+          r:RMIN+(RMAX-RMIN)*Math.sqrt(maxRisp>0?a.risp/maxRisp:0),
+          label:a.area, risp:a.risp, payback:a.payback, complessita:Math.min(5,Math.max(1,Number(a.complessita)||3)),
+          _c:PALETTE[i%PALETTE.length]
+        }));
+        chartBolle=new Chart(bbEl,{ type:"bubble",
+          data:{ datasets:[{ data:pts, backgroundColor:pts.map(p=>rgba(p._c,0.55)), borderColor:pts.map(p=>p._c), borderWidth:2, hoverBorderWidth:3 }] },
+          options:{ responsive:true, maintainAspectRatio:false, layout:{padding:{top:26,right:34,left:8,bottom:6}},
+            plugins:{ legend:{display:false},
+              tooltip:{ callbacks:{ title:(c)=>c[0].raw.label,
+                label:(c)=>{ const p=c.raw; return [`Tempo di ritorno: ${fmt1(p.payback)} anni`,`Complessità: ${p.complessita}/5`,`Risparmio: ${fmt2(p.risp)} €/anno`]; } } },
+              datalabels:{ color:"#1f2430", font:{size:11,weight:"700"}, anchor:"center", align:"top", offset:8, clip:false, clamp:true,
+                formatter:(v,ctx)=>ctx.chart.data.datasets[0].data[ctx.dataIndex].label } },
+            scales:{
+              x:{ beginAtZero:true, suggestedMax:Math.ceil(maxPay)+1, title:{display:true, text:"Tempo di ritorno [anni]", font:{weight:"600"}}, grid:{color:"#E6E6E6"} },
+              y:{ min:0.5, max:5.5, ticks:{stepSize:1, callback:(v)=>(v>=1&&v<=5)?v:""}, title:{display:true, text:"Complessità (1–5)", font:{weight:"600"}}, grid:{color:"#E6E6E6"} }
+            } } });
+      } else if(bbEl.getContext){
+        const cx=bbEl.getContext("2d"); cx.clearRect(0,0,bbEl.width,bbEl.height);
+        cx.save(); cx.fillStyle="#888"; cx.font="13px system-ui"; cx.textAlign="center"; cx.textBaseline="middle";
+        cx.fillText("Nessun intervento con investimento e risparmio valorizzati.", bbEl.width/2, bbEl.height/2); cx.restore();
+      }
     }
   }
 
@@ -1655,7 +1704,7 @@
         superficie:v("superficie"), driver:v("driver"), driver_um:v("driver_um"), ore_lavorative:v("ore_lavorative"), ambiente_riscaldato:v("ambiente_riscaldato"),
         regione:v("regione"), provincia:v("provincia"), comune:v("comune"), fascia_climatica:v("fascia_climatica"), gradi_giorno:v("gradi_giorno"), veicoli:v("veicoli"), km:v("km"), commento_generale:v("commento_generale"), commento_mensile:v("commento_mensile"),
         EErete:v("EErete"), EEfer:v("EEfer"), gas:v("gas"), gasolio:v("gasolio"), PEE:v("PEE"), Pgas:v("Pgas"), Pgasolio:v("Pgasolio") },
-      interventiState:interventiState.map(s=>({eff:s.eff,intervento:!!s.intervento,opportunita:s.opportunita??"",investimento:Number(s.investimento)||0,tipo_override:s.tipo_override??"",kwp:Number(s.kwp)||0,prod:Number(s.prod)||0,autoc:Number(s.autoc)||0,pzonale:Number(s.pzonale)||0})),
+      interventiState:interventiState.map(s=>({eff:s.eff,intervento:!!s.intervento,opportunita:s.opportunita??"",investimento:Number(s.investimento)||0,tipo_override:s.tipo_override??"",kwp:Number(s.kwp)||0,prod:Number(s.prod)||0,autoc:Number(s.autoc)||0,pzonale:Number(s.pzonale)||0,complessita:Math.min(5,Math.max(1,Number(s.complessita)||3))})),
       risparmioPctState:risparmioPctState.map(p=>({bassa:Number(p.bassa)||0,media:Number(p.media)||0})),
       mensili:{ ee:mensili.ee.slice(), gas:mensili.gas.slice() },
       ui:Object.fromEntries(SPEC_KPIS.map(k=>["spec_"+k.id, !!document.getElementById("spec_"+k.id)?.checked]))
@@ -1672,7 +1721,7 @@
   function buildExcelWorkbook(){
     const payload=buildProjectPayload();
     const formRows=Object.entries(payload.form||{}).map(([campo,valore])=>({campo,valore:valore??""}));
-    const interventiRows=INTERVENTI_STANDARD.map((it,i)=>{ const s=payload.interventiState?.[i]||{}; return {indice:i+1,area:it.area,tipo:it.tipo,efficienza:s.eff??"N.A.",intervento_consigliato:s.intervento?"SI":"NO",opportunita:s.opportunita??"",investimento_euro:Number(s.investimento)||0,fv_kwp:Number(s.kwp)||0,fv_producibilita:Number(s.prod)||0,fv_autoconsumo_pct:Number(s.autoc)||0,fv_prezzo_zonale:Number(s.pzonale)||0,tipo_override:s.tipo_override??""}; });
+    const interventiRows=INTERVENTI_STANDARD.map((it,i)=>{ const s=payload.interventiState?.[i]||{}; return {indice:i+1,area:it.area,tipo:it.tipo,efficienza:s.eff??"N.A.",intervento_consigliato:s.intervento?"SI":"NO",opportunita:s.opportunita??"",investimento_euro:Number(s.investimento)||0,fv_kwp:Number(s.kwp)||0,fv_producibilita:Number(s.prod)||0,fv_autoconsumo_pct:Number(s.autoc)||0,fv_prezzo_zonale:Number(s.pzonale)||0,complessita:Math.min(5,Math.max(1,Number(s.complessita)||3)),tipo_override:s.tipo_override??""}; });
     const risparmiRows=INTERVENTI_STANDARD.map((it,i)=>({indice:i+1,area:it.area,tipo:it.tipo,risparmio_bassa_percento:Number(payload.risparmioPctState?.[i]?.bassa)||0,risparmio_media_percento:Number(payload.risparmioPctState?.[i]?.media)||0}));
     const mensiliRows=MONTHS.map((m,i)=>({mese:m, ee_kwh:payload.mensili?.ee?.[i]??"", gas_smc:payload.mensili?.gas?.[i]??""}));
     const wb=XLSX.utils.book_new();
@@ -1684,7 +1733,7 @@
   }
   function exportAuditExcel(){ if(typeof XLSX==="undefined"){ toast("Excel non disponibile offline"); return; } try{ XLSX.writeFile(buildExcelWorkbook(),"audit.xlsx"); toast("Excel esportato"); }catch(err){ console.error(err); toast("Errore export Excel"); } }
   function normalizeEffValue(value){ const v=String(value??"").trim().toLowerCase(); if(["alta","high"].includes(v)) return "Alta"; if(["media","medium","med"].includes(v)) return "Media"; if(["bassa","low"].includes(v)) return "Bassa"; return "N.A."; }
-  function coerceInterventoState(raw){ const eff=normalizeEffValue(raw?.eff); const intervento=computeInterventoAuto(eff); const opportunita=String(raw?.opportunita??""); return { eff, intervento, opportunita, investimento:Number(raw?.investimento)||0, tipo_override:String(raw?.tipo_override??""), kwp:Number(raw?.kwp)||0, prod:(raw?.prod!=null&&raw.prod!=="")?Number(raw.prod):1150, autoc:(raw?.autoc!=null&&raw.autoc!=="")?Number(raw.autoc):70, pzonale:Number(raw?.pzonale)||0 }; }
+  function coerceInterventoState(raw){ const eff=normalizeEffValue(raw?.eff); const intervento=computeInterventoAuto(eff); const opportunita=String(raw?.opportunita??""); return { eff, intervento, opportunita, investimento:Number(raw?.investimento)||0, tipo_override:String(raw?.tipo_override??""), kwp:Number(raw?.kwp)||0, prod:(raw?.prod!=null&&raw.prod!=="")?Number(raw.prod):1150, autoc:(raw?.autoc!=null&&raw.autoc!=="")?Number(raw.autoc):70, pzonale:Number(raw?.pzonale)||0, complessita:(raw?.complessita!=null&&raw.complessita!=="")?Math.min(5,Math.max(1,Number(raw.complessita))):3 }; }
   function importAuditExcel(event){ const file=event?.target?.files?.[0]; if(!file) return; if(typeof XLSX==="undefined"){ toast("Excel non disponibile offline"); event.target.value=""; return; }
     const reader=new FileReader();
     reader.onload=(e)=>{ try{
@@ -1694,7 +1743,7 @@
       if(!formRows.length && !interventiRows.length && !risparmiRows.length) throw new Error("Workbook non riconosciuto.");
       const payload=buildProjectPayload(); payload.form=payload.form||{};
       formRows.forEach(row=>{ const key=String(row.campo||"").trim(); if(!key) return; payload.form[key]=row.valore??""; });
-      if(interventiRows.length) payload.interventiState=INTERVENTI_STANDARD.map((it,i)=>{ const row=interventiRows[i]||{}; return coerceInterventoState({eff:row.efficienza??row.eff??"N.A.",opportunita:row.opportunita??"",investimento:row.investimento_euro??row.investimento??0,kwp:row.fv_kwp,prod:row.fv_producibilita,autoc:row.fv_autoconsumo_pct,pzonale:row.fv_prezzo_zonale,tipo_override:row.tipo_override??""}); });
+      if(interventiRows.length) payload.interventiState=INTERVENTI_STANDARD.map((it,i)=>{ const row=interventiRows[i]||{}; return coerceInterventoState({eff:row.efficienza??row.eff??"N.A.",opportunita:row.opportunita??"",investimento:row.investimento_euro??row.investimento??0,kwp:row.fv_kwp,prod:row.fv_producibilita,autoc:row.fv_autoconsumo_pct,pzonale:row.fv_prezzo_zonale,complessita:row.complessita,tipo_override:row.tipo_override??""}); });
       if(risparmiRows.length) payload.risparmioPctState=INTERVENTI_STANDARD.map((it,i)=>{ const row=risparmiRows[i]||{}; return { bassa:num(row.risparmio_bassa_percento??row.bassa), media:num(row.risparmio_media_percento??row.media) }; });
       if(mensiliRows.length){ payload.mensili={ee:Array(12).fill(null),gas:Array(12).fill(null)}; mensiliRows.slice(0,12).forEach((row,i)=>{ const e=row.ee_kwh, g=row.gas_smc; payload.mensili.ee[i]=(e===""||e==null)?null:num(e); payload.mensili.gas[i]=(g===""||g==null)?null:num(g); }); }
       applyAuditJSON(payload); toast("Excel importato");
@@ -1708,8 +1757,8 @@
     ["azienda","data","indirizzo","ateco","superficie","driver","driver_um","ore_lavorative","ambiente_riscaldato","regione","veicoli","km","EErete","EEfer","gas","gasolio","PEE","Pgas","Pgasolio"].forEach(k=>setVal(k,f[k]));
     setVal("atecoAnno", f.atecoAnno ?? "2007"); setVal("commento_generale", f.commento_generale); setVal("commento_mensile", f.commento_mensile);
     for(let i=0;i<12;i++){ mensili.ee[i]=(payload.mensili?.ee?.[i] ?? null); mensili.gas[i]=(payload.mensili?.gas?.[i] ?? null); }
-    INTERVENTI_STANDARD.forEach((it,i)=>{ Object.assign(interventiState[i],{eff:"N.A.",intervento:false,opportunita:"",investimento:0,kwp:0,prod:1150,autoc:70,pzonale:0,tipo_override: it.area==="Altro"?"":null}); });
-    if(Array.isArray(payload.interventiState)) payload.interventiState.forEach((s,i)=>{ if(!interventiState[i]) return; const n=coerceInterventoState(s); Object.assign(interventiState[i],{eff:n.eff,intervento:n.intervento,opportunita:n.opportunita,investimento:n.investimento,kwp:n.kwp,prod:n.prod,autoc:n.autoc,pzonale:n.pzonale,tipo_override:INTERVENTI_STANDARD[i]?.area==="Altro"?n.tipo_override:null}); });
+    INTERVENTI_STANDARD.forEach((it,i)=>{ Object.assign(interventiState[i],{eff:"N.A.",intervento:false,opportunita:"",investimento:0,kwp:0,prod:1150,autoc:70,pzonale:0,complessita:3,tipo_override: it.area==="Altro"?"":null}); });
+    if(Array.isArray(payload.interventiState)) payload.interventiState.forEach((s,i)=>{ if(!interventiState[i]) return; const n=coerceInterventoState(s); Object.assign(interventiState[i],{eff:n.eff,intervento:n.intervento,opportunita:n.opportunita,investimento:n.investimento,kwp:n.kwp,prod:n.prod,autoc:n.autoc,pzonale:n.pzonale,complessita:n.complessita,tipo_override:INTERVENTI_STANDARD[i]?.area==="Altro"?n.tipo_override:null}); });
     INTERVENTI_STANDARD.forEach((it,i)=>{ const b=defaultPctBassaForArea(it.area); risparmioPctState[i].bassa=b; risparmioPctState[i].media=defaultPctMediaFromBassa(b); });
     if(Array.isArray(payload.risparmioPctState)) payload.risparmioPctState.forEach((p,i)=>{ if(!risparmioPctState[i]) return; risparmioPctState[i].bassa=num(p.bassa); risparmioPctState[i].media=num(p.media); });
     renderSpecKpiForm();
@@ -1729,7 +1778,7 @@
     for(let i=0;i<12;i++){ mensili.ee[i]=null; mensili.gas[i]=null; } renderMensiliForm();
     renderSpecKpiForm();
     const fe=document.getElementById("fileImportExcel"), fj=document.getElementById("fileImportJson"); if(fe) fe.value=""; if(fj) fj.value="";
-    interventiState.forEach((s,i)=>{ Object.assign(s,{eff:"N.A.",intervento:false,opportunita:"",investimento:0,kwp:0,prod:1150,autoc:70,pzonale:0,tipo_override:INTERVENTI_STANDARD[i]?.area==="Altro"?"":null}); });
+    interventiState.forEach((s,i)=>{ Object.assign(s,{eff:"N.A.",intervento:false,opportunita:"",investimento:0,kwp:0,prod:1150,autoc:70,pzonale:0,complessita:3,tipo_override:INTERVENTI_STANDARD[i]?.area==="Altro"?"":null}); });
     INTERVENTI_STANDARD.forEach((it,i)=>{ const b=defaultPctBassaForArea(it.area); risparmioPctState[i].bassa=b; risparmioPctState[i].media=defaultPctMediaFromBassa(b); });
     renderInterventiForm(); renderRisparmiPctForm(); updateDescrizioneAteco(); updateClimaFromRegione(); render();
   }
