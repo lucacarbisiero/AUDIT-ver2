@@ -1,12 +1,13 @@
 /* Service Worker - Audit Energetico
    App-shell precache + runtime cache (Chart.js, datalabels, SheetJS da CDN).
    Bump CACHE quando aggiorni i file. */
-const CACHE = "audit-cache-v1";
+const CACHE = "audit-cache-v2";
 const SHELL = [
   "./",
   "./index.html",
   "./manifest.json",
   "./ateco_map.js",
+  "./comuni_gg.js",
   "./logo.png",
   "./icona-192.png",
   "./icona-512.png"
