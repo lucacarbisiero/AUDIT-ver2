@@ -230,6 +230,8 @@
   .doc th{ background:var(--brand-tint); color:var(--brand-dd); text-align:left; font-weight:700; }
   .doc tbody th{ background:#efeef4; }
   .center{ text-align:center; } .right{ text-align:right; }
+  .doc tr.total-row > th:first-child, .doc tr.total-row > td:first-child{ text-align:left; }
+  .doc tr.total-row > th:not(:first-child), .doc tr.total-row > td:not(:first-child){ text-align:right; }
 
   /* Banda intestazione (logo) — in flusso, ripetuta in cima a ogni pagina (niente overlap) */
   .pageHead{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:0 0 8px; margin:0 0 18px; border-bottom:2px solid var(--brand); }
@@ -310,6 +312,10 @@
   .chartWrap canvas{ width:100% !important; height:100% !important; display:block; }
   .charts2{ display:grid; grid-template-columns:2fr 1fr; gap:14px; align-items:start; }
   .charts2equal{ display:grid; grid-template-columns:1fr 1fr; gap:14px; align-items:start; }
+  /* Riepilogo energia: i due box devono avere la stessa altezza */
+  .energySummaryCharts{ align-items:stretch; }
+  .energySummaryCharts > .chartCard{ height:100%; }
+
   @media(max-width:680px){ .charts2,.charts2equal{ grid-template-columns:1fr; } }
 
   .chartLegend{ display:flex; gap:14px; justify-content:center; flex-wrap:wrap; margin-top:10px; }
@@ -402,6 +408,30 @@
   .toast{ position:fixed; left:50%; transform:translateX(-50%) translateY(20px); bottom:calc(20px + var(--safe-bottom)); z-index:80; background:var(--text); color:#fff; padding:12px 18px; border-radius:13px; font-size:14px; font-weight:600; box-shadow:var(--shadow); opacity:0; pointer-events:none; transition:opacity .25s, transform .25s; max-width:90vw; text-align:center; }
   .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
 
+  /* Misurazione invisibile usata per dividere la tabella Aree di intervento */
+  .printMeasureHost{
+    position:absolute;
+    left:-100000px;
+    top:0;
+    width:184mm;
+    visibility:hidden;
+    pointer-events:none;
+    background:#fff;
+  }
+  .printMeasureHost .sheet{
+    display:flex;
+    flex-direction:column;
+    width:184mm;
+    height:270mm;
+    min-height:270mm;
+    overflow:hidden;
+  }
+  .printMeasureHost .sheet-foot{ margin-top:auto; }
+  .printMeasureHost h2{ margin-top:14px !important; }
+  .printMeasureHost table{ margin:8px 0 10px !important; }
+  .printMeasureHost th,
+  .printMeasureHost td{ padding:5px 9px !important; }
+
   /* ============================================================
      PRINT (PDF)
   ============================================================ */
@@ -413,16 +443,64 @@
     .previewCol{ position:static !important; transform:none !important; overflow:visible !important; }
     .doc{ max-width:none !important; border:0 !important; border-radius:0 !important; padding:0 !important; margin:0 !important; box-shadow:none !important; }
     /* ogni .sheet = una pagina; piè di pagina ancorato in basso */
-    .sheet{ break-before:page; page-break-before:always; display:flex; flex-direction:column; min-height:255mm; }
-    .sheet:first-child{ break-before:auto; page-break-before:auto; }
+    .sheet{
+      display:flex;
+      flex-direction:column;
+      min-height:270mm;
+      break-after:page;
+      page-break-after:always;
+    }
+
+    .sheet:last-child{
+      break-after:auto;
+      page-break-after:auto;
+    }
     .sheet-foot{ margin-top:auto; }
+
+    /* Aree di intervento: ogni blocco generato corrisponde a un foglio */
+    .sheet-interventi .sheet-foot{
+      position:static;
+      margin-top:auto !important;
+    }
+    .sheet-interventi thead{
+      display:table-header-group;
+    }
+    .sheet-interventi tr{
+      break-inside:avoid;
+      page-break-inside:avoid;
+    }
+    .doc h2.section-continuation{
+      counter-increment:none;
+    }
+    .doc h2.section-continuation::before{
+      content:"";
+    }
     .pageHead{ break-after:avoid; page-break-after:avoid; break-inside:avoid; }
     /* compattazione per far stare ogni sezione in una pagina */
     .cover{ padding:2px 0 10px !important; }
     .cover h1{ font-size:28px !important; }
     .cover .cover-company{ margin-top:8px !important; }
-    .indice{ margin:12px 0 !important; padding:10px 16px !important; }
-    .toc li{ padding:5px 0 !important; }
+    /* Compattazione esclusiva del box Indice della prima pagina */
+    .sheet:first-child .indice{
+      margin:8px 0 !important;
+      padding:8px 14px !important;
+    }
+    .sheet:first-child .indice-title{
+      margin:0 0 6px !important;
+      font-size:11px !important;
+    }
+    .sheet:first-child .toc li{
+      gap:9px !important;
+      padding:3px 0 !important;
+      font-size:12.5px !important;
+      line-height:1.2 !important;
+    }
+    .sheet:first-child .toc li::before{
+      width:20px !important;
+      height:20px !important;
+      border-radius:6px !important;
+      font-size:10.5px !important;
+    }
     .execTitle{ margin:12px 0 8px !important; }
     .doc p{ margin-bottom:8px !important; }
     .doc h2{ margin-top:14px !important; }
@@ -434,7 +512,7 @@
     .charts2{ grid-template-columns:2fr 1fr !important; gap:6mm !important; }
     .chartWrap{ height:180px !important; }
     .chartWrap.donut{ width:180px !important; height:180px !important; }
-    .chartWrap.donut.donut75{ width:430px !important; height:190px !important; aspect-ratio:auto !important; }
+    .chartWrap.donut.donut75{ width:450px !important; height:225px !important; aspect-ratio:auto !important; }
     .chartCard{ padding:8px !important; margin:6px 0 8px !important; }
     .doc th, .doc td{ padding:5px 9px !important; }
     .doc table{ margin:8px 0 10px !important; }
@@ -813,7 +891,7 @@
           <tr><td>Energia Elettrica rete</td><td class="right">{{EErete}}</td><td></td><td></td><td class="right">{{Eerete_tep}}</td><td class="right">{{perEE}}</td><td class="center">0,187 x 10<sup>-3</sup></td></tr>
           <tr><td>Gas</td><td></td><td class="right">{{gas}}</td><td></td><td class="right">{{gas_tep}}</td><td class="right">{{pergas}}</td><td class="center">0,825 x 10<sup>-3</sup></td></tr>
           <tr><td>Gasolio/Benzina</td><td></td><td></td><td class="right">{{gasolio}}</td><td class="right">{{gasolio_tep}}</td><td class="right">{{pergasolio}}</td><td class="center">0,867 x 10<sup>-3</sup></td></tr>
-          <tr><th>TOTALE</th><th class="right">{{EErete}}</th><th class="right">{{gas}}</th><th class="right">{{gasolio}}</th><th class="right">{{tot_tep}}</th><th class="right">100%</th><th></th></tr>
+          <tr class="total-row"><th>TOTALE</th><th class="right">{{EErete}}</th><th class="right">{{gas}}</th><th class="right">{{gasolio}}</th><th class="right">{{tot_tep}}</th><th class="right">100%</th><th></th></tr>
         </tbody>
       </table>
       <p><br><br></p>
@@ -827,7 +905,7 @@
       <div class="sheet-foot"></div></div>
       <div class="sheet"><div class="pageHead"><img class="ph-logo" src="logo.png" alt="fbc group" onerror="this.style.display='none'"><span class="ph-doc">Audit energetico</span></div>
       <h3>RIEPILOGO CONSUMI E COSTI</h3>
-      <div class="charts2equal">
+      <div class="charts2equal energySummaryCharts">
         <div class="chartCard"><div class="chartTitle">Energia primaria [tep]</div><div class="chartWrap donut"><canvas id="chartEnergiaPrimaria"></canvas></div><div id="legendEnergiaPrimaria" class="chartLegend"></div></div>
         <div class="chartCard"><div class="chartTitle">Principali vettori energetici [tep]</div><div class="chartWrap"><canvas id="chartVettoriEnergetici"></canvas></div></div>
       </div>
@@ -842,7 +920,7 @@
             <tr><td>Energia Elettrica</td><td class="right">{{PEE}}</td><td class="right">{{EErete}}</td><td class="right">{{costoEE}} €</td><td class="right">{{inc_costoEE}}</td></tr>
             <tr><td>Gas</td><td class="right">{{Pgas}}</td><td class="right">{{gas}}</td><td class="right">{{costogas}} €</td><td class="right">{{inc_costogas}}</td></tr>
             <tr><td>Carburante</td><td class="right">{{Pgasolio}}</td><td class="right">{{gasolio}}</td><td class="right">{{costogasolio}} €</td><td class="right">{{inc_costogasolio}}</td></tr>
-            <tr><th>TOTALE</th><th></th><th></th><th class="right">{{costotot}} €</th><th class="right">100%</th></tr>
+            <tr class="total-row"><th>TOTALE</th><th></th><th></th><th class="right">{{costotot}} €</th><th class="right">100%</th></tr>
           </tbody>
         </table>
         <div class="chartCard"><div class="chartTitle">Confronto costi vs consumi energetici</div><div class="chartWrap donut donut75"><canvas id="chartCostiConsumi"></canvas></div></div>
@@ -871,7 +949,7 @@
           <tr><td>Energia elettrica (da rete)</td><td class="right">{{co2_ee}}</td></tr>
           <tr><td>Gas</td><td class="right">{{co2_gas}}</td></tr>
           <tr><td>Gasolio/Benzina</td><td class="right">{{co2_gasolio}}</td></tr>
-          <tr><th>TOTALE</th><th class="right">{{co2_tot}}</th></tr>
+          <tr class="total-row"><th>TOTALE</th><th class="right">{{co2_tot}}</th></tr>
           <tr><td><b>CO₂ evitabile con gli interventi proposti</b></td><td class="right"><b>{{co2_evitata}}</b></td></tr>
         </tbody>
       </table>
@@ -884,7 +962,7 @@
       </table>
 
       <div class="sheet-foot"></div></div>
-      <div class="sheet"><div class="pageHead"><img class="ph-logo" src="logo.png" alt="fbc group" onerror="this.style.display='none'"><span class="ph-doc">Audit energetico</span></div>
+      <div class="sheet sheet-interventi"><div class="pageHead"><img class="ph-logo" src="logo.png" alt="fbc group" onerror="this.style.display='none'"><span class="ph-doc">Audit energetico</span></div>
       <h2>Aree di intervento</h2>
       <table>
         <thead><tr><th>Aree di intervento</th><th>Tipo</th><th class="center">Efficienza</th><th class="center">Intervento consigliato</th><th>Opportunità</th></tr></thead>
@@ -1221,7 +1299,7 @@
       const pay = a.payback==null ? "—" : (a.payback>=100 ? "&gt;100 anni" : (fmt1(a.payback)+" anni"));
       return `<tr><td>${safe(a.area)}</td><td>${safe(a.tipo)}</td><td class="right">${a.inv>0?fmt2(a.inv)+" €":"—"}</td><td class="right">${fmt2(a.risp)} €</td><td class="center">${pay}</td></tr>`;
     }).join("");
-    const footer=`<tr><th class="right">TOTALE</th><th></th><th class="right">${R.invTot>0?fmt2(R.invTot)+" €":"—"}</th><th class="right">${fmt2(R.total)} € <span class="muted">(${fmt1(R.pctTot)}%)</span></th><th></th></tr>`;
+    const footer=`<tr class="total-row"><th>TOTALE</th><th></th><th class="right">${R.invTot>0?fmt2(R.invTot)+" €":"—"}</th><th class="right">${fmt2(R.total)} € <span class="muted">(${fmt1(R.pctTot)}%)</span></th><th></th></tr>`;
     if(R.perArea.length===0) return `<tr><td colspan="5" class="center muted">Nessuna area con efficienza Media o Bassa.</td></tr>${footer}`;
     return rows+footer;
   }
@@ -1448,6 +1526,79 @@
     }
   }
 
+  // Divide automaticamente la tabella "Aree di intervento" in più fogli.
+  // Ogni foglio riceve intestazione, tabella e piè di pagina propri.
+  function paginateInterventiSheets(){
+    const original=docRoot.querySelector(".sheet-interventi");
+    if(!original) return;
+
+    const tbody=original.querySelector("tbody");
+    if(!tbody) return;
+
+    const rows=[...tbody.querySelectorAll("tr")].map(r=>r.cloneNode(true));
+    if(!rows.length) return;
+
+    const measureHost=document.createElement("div");
+    measureHost.className="doc printMeasureHost";
+    document.body.appendChild(measureHost);
+
+    const makeSheet=(pageIndex=0)=>{
+      const sheet=original.cloneNode(true);
+      const body=sheet.querySelector("tbody");
+      body.innerHTML="";
+
+      const title=sheet.querySelector("h2");
+      if(title && pageIndex>0){
+        title.textContent="Aree di intervento – segue";
+        title.classList.add("section-continuation","toc-skip");
+      }
+
+      const foot=sheet.querySelector(".sheet-foot");
+      if(foot) foot.textContent="";
+      return sheet;
+    };
+
+    const chunks=[];
+    let current=[];
+    let measureSheet=makeSheet(0);
+    measureHost.appendChild(measureSheet);
+    let measureBody=measureSheet.querySelector("tbody");
+
+    rows.forEach((row)=>{
+      const candidate=row.cloneNode(true);
+      measureBody.appendChild(candidate);
+
+      const overflow=measureSheet.scrollHeight>measureSheet.clientHeight+1;
+      if(overflow && current.length){
+        candidate.remove();
+        chunks.push(current);
+        current=[row];
+
+        measureSheet.remove();
+        measureSheet=makeSheet(chunks.length);
+        measureHost.appendChild(measureSheet);
+        measureBody=measureSheet.querySelector("tbody");
+        measureBody.appendChild(row.cloneNode(true));
+      }else{
+        current.push(row);
+      }
+    });
+
+    if(current.length) chunks.push(current);
+    measureHost.remove();
+
+    if(chunks.length===1) return;
+
+    const fragment=document.createDocumentFragment();
+    chunks.forEach((chunk,index)=>{
+      const sheet=makeSheet(index);
+      const body=sheet.querySelector("tbody");
+      chunk.forEach(row=>body.appendChild(row.cloneNode(true)));
+      fragment.appendChild(sheet);
+    });
+    original.replaceWith(fragment);
+  }
+
   // =========================
   // Render
   // =========================
@@ -1478,10 +1629,11 @@
     html=html.replace("{{EFF_GAUGE}}",buildEffGauge(calc));
     html=html.replace("{{EFF_FACES}}",buildEffFaces(calc));
     docRoot.innerHTML=applyTemplate(html,calc);
+    paginateInterventiSheets();
     (function(){ const sheets=docRoot.querySelectorAll(".sheet"), N=sheets.length;
       sheets.forEach((s,i)=>{ const f=s.querySelector(".sheet-foot"); if(f) f.textContent=`Pag ${i+1} di ${N}`; }); })();
     (function(){ const toc=docRoot.querySelector(".toc"); if(!toc) return;
-      const h2s=[...docRoot.querySelectorAll(".printContent h2")];
+      const h2s=[...docRoot.querySelectorAll(".printContent h2:not(.toc-skip)")];
       toc.innerHTML=h2s.map(h=>`<li>${h.textContent}</li>`).join(""); })();
     destroyCharts(); chartsRendered=false;
     if(previewVisible()){ renderCharts(calc); chartsRendered=true; }
