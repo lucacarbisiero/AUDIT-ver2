@@ -1217,8 +1217,8 @@
         risp=base*pct;
       }
       const inv=Number(st.investimento)||0;
-      // l'area entra nei totali solo se valorizzata (% risparmio > 0 o investimento)
-      if(risp<=0 && inv<=0) return;
+      // entrano in tabella/totali SOLO gli interventi con un investimento indicato
+      if(inv<=0) return;
       const payback=(risp>0 && inv>0)?(inv/risp):null;
       total+=risp; invTot+=inv;
       perArea.push({ area:it.area, tipo:(it.area==="Altro"?(st.tipo_override||""):it.tipo), risp, inv, payback, complessita:Math.min(5,Math.max(1,Number(st.complessita)||3)) });
@@ -1320,7 +1320,7 @@
       return `<tr><td>${safe(a.area)}</td><td>${safe(a.tipo)}</td><td class="right">${a.inv>0?fmt2(a.inv)+" €":"—"}</td><td class="right">${fmt2(a.risp)} €</td><td class="center">${pay}</td></tr>`;
     }).join("");
     const footer=`<tr class="total-row"><th>TOTALE</th><th></th><th class="right">${R.invTot>0?fmt2(R.invTot)+" €":"—"}</th><th class="right">${fmt2(R.total)} € <span class="muted">(${fmt1(R.pctTot)}%)</span></th><th></th></tr>`;
-    if(R.perArea.length===0) return `<tr><td colspan="5" class="center muted">Nessun intervento con risparmio valorizzato.</td></tr>${footer}`;
+    if(R.perArea.length===0) return `<tr><td colspan="5" class="center muted">Nessun intervento con investimento indicato.</td></tr>${footer}`;
     return rows+footer;
   }
   const EFF_CLASS={ "Alta":"eff-alta", "Media":"eff-media", "Bassa":"eff-bassa", "N.A.":"eff-na" };
