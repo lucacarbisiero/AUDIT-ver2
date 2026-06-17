@@ -309,6 +309,7 @@
   .chartWrap{ position:relative; width:100%; height:260px; }
   .chartWrap.donut{ max-width:340px; height:auto; aspect-ratio:1/1; margin:0 auto; }
   .chartWrap.donut.donut75{ max-width:520px; width:100%; aspect-ratio:2/1; }
+  .chartWrap.bubble{ height:360px; }
   .chartWrap canvas{ width:100% !important; height:100% !important; display:block; }
   .charts2{ display:grid; grid-template-columns:2fr 1fr; gap:14px; align-items:start; }
   .charts2equal{ display:grid; grid-template-columns:1fr 1fr; gap:14px; align-items:start; }
@@ -513,6 +514,8 @@
     .chartWrap{ height:180px !important; }
     .chartWrap.donut{ width:180px !important; height:180px !important; }
     .chartWrap.donut.donut75{ width:450px !important; height:225px !important; aspect-ratio:auto !important; }
+    /* bolle: evita lo schiacciamento (180px su tutta la larghezza A4 = ~3.9:1) */
+    .chartWrap.bubble{ width:540px !important; height:340px !important; aspect-ratio:auto !important; margin:0 auto; }
     .chartCard{ padding:8px !important; margin:6px 0 8px !important; }
     .doc th, .doc td{ padding:5px 9px !important; }
     .doc table{ margin:8px 0 10px !important; }
@@ -659,7 +662,7 @@
       <details class="card" open>
         <summary><span class="sicon">🛠️</span><span class="stext">Aree di intervento</span><span class="chev" data-icon="chev"></span></summary>
         <div class="card-body">
-          <div class="hint">Imposta l'<b>Efficienza</b>. Per <b>Media</b> o <b>Bassa</b> l'intervento è consigliato automaticamente; il campo <b>Opportunità</b> è sempre compilabile (anche con efficienza Alta).</div>
+          <div class="hint">Imposta l'<b>Efficienza</b> (Media/Bassa = intervento consigliato). <b>Opportunità</b>, <b>investimento</b> e <b>complessità</b> sono compilabili per ogni area con efficienza impostata (anche <b>Alta</b>); la <b>% di risparmio</b> (unica, modificabile) si imposta nella scheda "Risparmi stimati — %" ed entra nei totali.</div>
           <div class="intervForm" id="interventiForm"></div>
           <div class="field" style="margin-top:14px"><label>Commento generale / conclusioni</label><textarea id="commento_generale" placeholder="Considerazioni conclusive sull'analisi…"></textarea></div>
         </div>
@@ -668,7 +671,7 @@
       <details class="card">
         <summary><span class="sicon">💡</span><span class="stext">Risparmi stimati — %</span><span class="chev" data-icon="chev"></span></summary>
         <div class="card-body">
-          <div class="hint">Default: <b>Bassa</b> = tabella base, <b>Media</b> = Bassa × 0,7. Modificabili solo per aree con efficienza Media/Bassa.</div>
+          <div class="hint">Una <b>% di risparmio per area</b> (unica soglia), con default da tabella base e <b>modificabile</b>. Compaiono qui tutte le aree con efficienza impostata; il valore inserito entra nei totali (sintesi, payback, grafico bolle).</div>
           <div class="intervForm" id="risparmiPctForm"></div>
         </div>
       </details>
@@ -811,7 +814,8 @@
   const sumArr=(a)=>{ const v=a.filter(x=>x!=null && x!==""); return v.length? v.reduce((s,x)=>s+Number(x),0):0; };
   function defaultPctBassaForArea(area){ return PCT_AREA[area] ?? 0; }
   function defaultPctMediaFromBassa(pBassa){ return (Number(pBassa)||0)*0.7; }
-  const risparmioPctState = INTERVENTI_STANDARD.map(it => { const b=defaultPctBassaForArea(it.area); return { bassa:b, media:defaultPctMediaFromBassa(b) }; });
+  // Soglia di risparmio UNICA per area (frazione), default = tabella base PCT_AREA, modificabile
+  const risparmioPctState = INTERVENTI_STANDARD.map(it => ({ pct: defaultPctBassaForArea(it.area) }));
 
   // =========================
   // TEMPLATE relazione
@@ -990,7 +994,7 @@
       <p class="muted">I risparmi sono calcolati statisticamente sulla base di interventi analoghi e possono non riflettere univocamente il caso in esame.</p>
 
       <h3 style="margin-top:16px">Prioritizzazione degli interventi</h3>
-      <div class="chartCard"><div class="chartTitle">Tempo di ritorno vs Complessità — dimensione bolla = risparmio annuo [€]</div><div class="chartWrap"><canvas id="chartBolle"></canvas></div></div>
+      <div class="chartCard"><div class="chartTitle">Tempo di ritorno vs Complessità — dimensione bolla = risparmio annuo [€]</div><div class="chartWrap bubble"><canvas id="chartBolle"></canvas></div></div>
       <p class="muted">Ogni bolla è un'area di intervento: in ascissa il <b>tempo di ritorno</b> (payback), in ordinata la <b>complessità</b> realizzativa (1–5) e con dimensione proporzionale al <b>risparmio economico annuo</b> stimato. Gli interventi più convenienti si collocano in basso a sinistra (ritorno rapido, bassa complessità). Sono rappresentati i soli interventi con investimento valorizzato.</p>
 
       <div class="sheet-foot"></div></div>
@@ -1078,6 +1082,7 @@
     interventiForm.innerHTML="";
     INTERVENTI_STANDARD.forEach((it,idx)=>{
       const st=interventiState[idx];
+      const showFields = st.intervento || st.eff==="Alta";   // inv/complessità/FV anche per Alta
       const wrap=document.createElement("div");
       wrap.className="iCard"+(st.intervento?" on":"");
       const tipoHTML = it.area==="Altro"
@@ -1102,7 +1107,7 @@
         <div style="margin-top:10px"><div class="lbl">Opportunità / commento</div>
           <textarea data-op="${idx}" placeholder="Note, criticità o opportunità (compilabile anche con efficienza Alta)…">${safe(st.opportunita)}</textarea>
         </div>
-        ${st.intervento?`<div class="iGrid" style="margin-top:10px">
+        ${showFields?`<div class="iGrid" style="margin-top:10px">
           <div><div class="lbl">Investimento stimato [€] — opz. (per il payback)</div>
             <input type="number" inputmode="decimal" step="100" min="0" data-inv="${idx}" value="${st.investimento||""}" placeholder="Es. 15000" /></div>
           <div><div class="lbl">Complessità (1–5) — per il grafico bolle</div>
@@ -1113,7 +1118,7 @@
               <option value="4" ${Number(st.complessita)===4?"selected":""}>4 — Alta</option>
               <option value="5" ${Number(st.complessita)===5?"selected":""}>5 — Molto alta</option>
             </select></div></div>`:""}
-        ${(it.area==="Fotovoltaico" && st.intervento)?`
+        ${(it.area==="Fotovoltaico" && showFields)?`
         <div class="iGrid" style="margin-top:10px">
           <div><div class="lbl">Potenza di picco [kW]</div><input type="number" inputmode="decimal" step="0.1" min="0" data-fv="kwp" data-i="${idx}" value="${st.kwp||""}" placeholder="Es. 100"/></div>
           <div><div class="lbl">Producibilità [kWh/kWp·anno] — preset da zona</div><input type="number" inputmode="decimal" step="10" min="0" data-fv="prod" data-i="${idx}" value="${st.prod||""}" placeholder="Es. 1150"/></div>
@@ -1125,9 +1130,8 @@
 
       wrap.querySelector(`select[data-eff="${idx}"]`).addEventListener("change",(e)=>{
         const eff=e.target.value; st.eff=eff; st.intervento=computeInterventoAuto(eff);
-        if(it.area==="Fotovoltaico" && (eff==="Media"||eff==="Bassa")) st.prod=fvProdForRegion(document.getElementById("regione").value||"");
-        const b=defaultPctBassaForArea(it.area); if(!risparmioPctState[idx]) risparmioPctState[idx]={bassa:0,media:0};
-        risparmioPctState[idx].bassa=b; risparmioPctState[idx].media=defaultPctMediaFromBassa(b);
+        if(it.area==="Fotovoltaico" && (eff==="Media"||eff==="Bassa"||eff==="Alta")) st.prod=fvProdForRegion(document.getElementById("regione").value||"");
+        if(!risparmioPctState[idx] || risparmioPctState[idx].pct==null) risparmioPctState[idx]={pct:defaultPctBassaForArea(it.area)};
         renderInterventiForm(); renderRisparmiPctForm(); render();
       });
       wrap.querySelector(`textarea[data-op="${idx}"]`).addEventListener("input",(e)=>{ st.opportunita=e.target.value; render(); });
@@ -1144,7 +1148,7 @@
   // Form % risparmio
   // =========================
   const risparmiPctForm=document.getElementById("risparmiPctForm");
-  function fmtPctInput(x){ const v=(Number(x)||0)*100; return v.toLocaleString("it-IT",{minimumFractionDigits:1,maximumFractionDigits:1}); }
+  function fmtPctInput(x){ return String(Math.round((Number(x)||0)*1000)/10); }   // es. 0.015 -> "1.5" (compatibile con input type=number)
   function parsePctInput(str){
     let s=String(str ?? "").trim(); if(!s) return 0;
     const hasComma=s.includes(","), hasDot=s.includes(".");
@@ -1154,27 +1158,26 @@
   }
   function renderRisparmiPctForm(){
     if(!risparmiPctForm) return;
-    const selected=INTERVENTI_STANDARD.map((it,idx)=>({it,idx,st:interventiState[idx]})).filter(x=>x.st && (x.st.eff==="Media"||x.st.eff==="Bassa") && x.it.area!=="Fotovoltaico");
+    const selected=INTERVENTI_STANDARD.map((it,idx)=>({it,idx,st:interventiState[idx]})).filter(x=>x.st && (x.st.eff==="Media"||x.st.eff==="Bassa"||x.st.eff==="Alta") && x.it.area!=="Fotovoltaico");
     risparmiPctForm.innerHTML="";
-    if(selected.length===0){ risparmiPctForm.innerHTML=`<div class="hint" style="margin:0">Nessuna area con efficienza Media o Bassa: niente da configurare.</div>`; return; }
+    if(selected.length===0){ risparmiPctForm.innerHTML=`<div class="hint" style="margin:0">Nessuna area con efficienza impostata: niente da configurare.</div>`; return; }
     selected.forEach(({it,idx,st})=>{
       const wrap=document.createElement("div"); wrap.className="iCard";
-      const effKey=(st.eff==="Bassa")?"bassa":"media";
-      const current=risparmioPctState[idx]?.[effKey] ?? 0;
+      const current=risparmioPctState[idx]?.pct ?? 0;
       wrap.innerHTML=`
         <div class="iHead"><span class="iArea">${safe(it.area)}</span><span class="iTipo">${safe(st.eff)}</span></div>
         <div class="iGrid">
-          <div><div class="lbl">% risparmio (${safe(st.eff)})</div>
+          <div><div class="lbl">% risparmio</div>
             <input type="number" step="0.1" min="0" inputmode="decimal" data-pct="${idx}" value="${safe(fmtPctInput(current))}" /></div>
           <div style="display:flex; align-items:flex-end"><button class="btn sm block" data-resetpct="${idx}">Ripristina default</button></div>
         </div>`;
       risparmiPctForm.appendChild(wrap);
       wrap.querySelector(`input[data-pct="${idx}"]`).addEventListener("input",(e)=>{
-        const val=parsePctInput(e.target.value); if(!risparmioPctState[idx]) risparmioPctState[idx]={bassa:0,media:0};
-        risparmioPctState[idx][effKey]=val; render();
+        const val=parsePctInput(e.target.value); if(!risparmioPctState[idx]) risparmioPctState[idx]={pct:0};
+        risparmioPctState[idx].pct=val; render();
       });
       wrap.querySelector(`button[data-resetpct="${idx}"]`).addEventListener("click",()=>{
-        const b=defaultPctBassaForArea(it.area); risparmioPctState[idx].bassa=b; risparmioPctState[idx].media=defaultPctMediaFromBassa(b);
+        risparmioPctState[idx].pct=defaultPctBassaForArea(it.area);
         renderRisparmiPctForm(); render();
       });
     });
@@ -1196,8 +1199,8 @@
     const perArea=[];
     INTERVENTI_STANDARD.forEach((it,idx)=>{
       const st=interventiState[idx];
-      if(!st || !(st.eff==="Media"||st.eff==="Bassa")) return;
-      const pct=(st.eff==="Bassa")?(risparmioPctState[idx]?.bassa ?? 0):(risparmioPctState[idx]?.media ?? 0);
+      if(!st || !(st.eff==="Media"||st.eff==="Bassa"||st.eff==="Alta")) return;
+      const pct=(risparmioPctState[idx]?.pct ?? 0);
       const tipo=(it.area==="Altro"?(st.tipo_override||""):(it.tipo||"")).trim();
       let risp=0;
       if(it.area==="Fotovoltaico"){
@@ -1214,6 +1217,8 @@
         risp=base*pct;
       }
       const inv=Number(st.investimento)||0;
+      // l'area entra nei totali solo se valorizzata (% risparmio > 0 o investimento)
+      if(risp<=0 && inv<=0) return;
       const payback=(risp>0 && inv>0)?(inv/risp):null;
       total+=risp; invTot+=inv;
       perArea.push({ area:it.area, tipo:(it.area==="Altro"?(st.tipo_override||""):it.tipo), risp, inv, payback, complessita:Math.min(5,Math.max(1,Number(st.complessita)||3)) });
@@ -1315,7 +1320,7 @@
       return `<tr><td>${safe(a.area)}</td><td>${safe(a.tipo)}</td><td class="right">${a.inv>0?fmt2(a.inv)+" €":"—"}</td><td class="right">${fmt2(a.risp)} €</td><td class="center">${pay}</td></tr>`;
     }).join("");
     const footer=`<tr class="total-row"><th>TOTALE</th><th></th><th class="right">${R.invTot>0?fmt2(R.invTot)+" €":"—"}</th><th class="right">${fmt2(R.total)} € <span class="muted">(${fmt1(R.pctTot)}%)</span></th><th></th></tr>`;
-    if(R.perArea.length===0) return `<tr><td colspan="5" class="center muted">Nessuna area con efficienza Media o Bassa.</td></tr>${footer}`;
+    if(R.perArea.length===0) return `<tr><td colspan="5" class="center muted">Nessun intervento con risparmio valorizzato.</td></tr>${footer}`;
     return rows+footer;
   }
   const EFF_CLASS={ "Alta":"eff-alta", "Media":"eff-media", "Bassa":"eff-bassa", "N.A.":"eff-na" };
@@ -1705,7 +1710,7 @@
         regione:v("regione"), provincia:v("provincia"), comune:v("comune"), fascia_climatica:v("fascia_climatica"), gradi_giorno:v("gradi_giorno"), veicoli:v("veicoli"), km:v("km"), commento_generale:v("commento_generale"), commento_mensile:v("commento_mensile"),
         EErete:v("EErete"), EEfer:v("EEfer"), gas:v("gas"), gasolio:v("gasolio"), PEE:v("PEE"), Pgas:v("Pgas"), Pgasolio:v("Pgasolio") },
       interventiState:interventiState.map(s=>({eff:s.eff,intervento:!!s.intervento,opportunita:s.opportunita??"",investimento:Number(s.investimento)||0,tipo_override:s.tipo_override??"",kwp:Number(s.kwp)||0,prod:Number(s.prod)||0,autoc:Number(s.autoc)||0,pzonale:Number(s.pzonale)||0,complessita:Math.min(5,Math.max(1,Number(s.complessita)||3))})),
-      risparmioPctState:risparmioPctState.map(p=>({bassa:Number(p.bassa)||0,media:Number(p.media)||0})),
+      risparmioPctState:risparmioPctState.map(p=>({pct:Number(p.pct)||0})),
       mensili:{ ee:mensili.ee.slice(), gas:mensili.gas.slice() },
       ui:Object.fromEntries(SPEC_KPIS.map(k=>["spec_"+k.id, !!document.getElementById("spec_"+k.id)?.checked]))
     };
@@ -1722,7 +1727,7 @@
     const payload=buildProjectPayload();
     const formRows=Object.entries(payload.form||{}).map(([campo,valore])=>({campo,valore:valore??""}));
     const interventiRows=INTERVENTI_STANDARD.map((it,i)=>{ const s=payload.interventiState?.[i]||{}; return {indice:i+1,area:it.area,tipo:it.tipo,efficienza:s.eff??"N.A.",intervento_consigliato:s.intervento?"SI":"NO",opportunita:s.opportunita??"",investimento_euro:Number(s.investimento)||0,fv_kwp:Number(s.kwp)||0,fv_producibilita:Number(s.prod)||0,fv_autoconsumo_pct:Number(s.autoc)||0,fv_prezzo_zonale:Number(s.pzonale)||0,complessita:Math.min(5,Math.max(1,Number(s.complessita)||3)),tipo_override:s.tipo_override??""}; });
-    const risparmiRows=INTERVENTI_STANDARD.map((it,i)=>({indice:i+1,area:it.area,tipo:it.tipo,risparmio_bassa_percento:Number(payload.risparmioPctState?.[i]?.bassa)||0,risparmio_media_percento:Number(payload.risparmioPctState?.[i]?.media)||0}));
+    const risparmiRows=INTERVENTI_STANDARD.map((it,i)=>({indice:i+1,area:it.area,tipo:it.tipo,risparmio_percento:Number(payload.risparmioPctState?.[i]?.pct)||0}));
     const mensiliRows=MONTHS.map((m,i)=>({mese:m, ee_kwh:payload.mensili?.ee?.[i]??"", gas_smc:payload.mensili?.gas?.[i]??""}));
     const wb=XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(formRows),"Form");
@@ -1744,7 +1749,7 @@
       const payload=buildProjectPayload(); payload.form=payload.form||{};
       formRows.forEach(row=>{ const key=String(row.campo||"").trim(); if(!key) return; payload.form[key]=row.valore??""; });
       if(interventiRows.length) payload.interventiState=INTERVENTI_STANDARD.map((it,i)=>{ const row=interventiRows[i]||{}; return coerceInterventoState({eff:row.efficienza??row.eff??"N.A.",opportunita:row.opportunita??"",investimento:row.investimento_euro??row.investimento??0,kwp:row.fv_kwp,prod:row.fv_producibilita,autoc:row.fv_autoconsumo_pct,pzonale:row.fv_prezzo_zonale,complessita:row.complessita,tipo_override:row.tipo_override??""}); });
-      if(risparmiRows.length) payload.risparmioPctState=INTERVENTI_STANDARD.map((it,i)=>{ const row=risparmiRows[i]||{}; return { bassa:num(row.risparmio_bassa_percento??row.bassa), media:num(row.risparmio_media_percento??row.media) }; });
+      if(risparmiRows.length) payload.risparmioPctState=INTERVENTI_STANDARD.map((it,i)=>{ const row=risparmiRows[i]||{}; return { pct:num(row.risparmio_percento??row.risparmio_bassa_percento??row.bassa??row.pct) }; });
       if(mensiliRows.length){ payload.mensili={ee:Array(12).fill(null),gas:Array(12).fill(null)}; mensiliRows.slice(0,12).forEach((row,i)=>{ const e=row.ee_kwh, g=row.gas_smc; payload.mensili.ee[i]=(e===""||e==null)?null:num(e); payload.mensili.gas[i]=(g===""||g==null)?null:num(g); }); }
       applyAuditJSON(payload); toast("Excel importato");
     }catch(err){ console.error(err); toast("Errore import Excel (fogli: Form, Interventi, RisparmiPct)"); } finally{ event.target.value=""; } };
@@ -1759,8 +1764,8 @@
     for(let i=0;i<12;i++){ mensili.ee[i]=(payload.mensili?.ee?.[i] ?? null); mensili.gas[i]=(payload.mensili?.gas?.[i] ?? null); }
     INTERVENTI_STANDARD.forEach((it,i)=>{ Object.assign(interventiState[i],{eff:"N.A.",intervento:false,opportunita:"",investimento:0,kwp:0,prod:1150,autoc:70,pzonale:0,complessita:3,tipo_override: it.area==="Altro"?"":null}); });
     if(Array.isArray(payload.interventiState)) payload.interventiState.forEach((s,i)=>{ if(!interventiState[i]) return; const n=coerceInterventoState(s); Object.assign(interventiState[i],{eff:n.eff,intervento:n.intervento,opportunita:n.opportunita,investimento:n.investimento,kwp:n.kwp,prod:n.prod,autoc:n.autoc,pzonale:n.pzonale,complessita:n.complessita,tipo_override:INTERVENTI_STANDARD[i]?.area==="Altro"?n.tipo_override:null}); });
-    INTERVENTI_STANDARD.forEach((it,i)=>{ const b=defaultPctBassaForArea(it.area); risparmioPctState[i].bassa=b; risparmioPctState[i].media=defaultPctMediaFromBassa(b); });
-    if(Array.isArray(payload.risparmioPctState)) payload.risparmioPctState.forEach((p,i)=>{ if(!risparmioPctState[i]) return; risparmioPctState[i].bassa=num(p.bassa); risparmioPctState[i].media=num(p.media); });
+    INTERVENTI_STANDARD.forEach((it,i)=>{ risparmioPctState[i].pct=defaultPctBassaForArea(it.area); });
+    if(Array.isArray(payload.risparmioPctState)) payload.risparmioPctState.forEach((p,i)=>{ if(!risparmioPctState[i]||!p) return; const v=(p.pct!==undefined)?p.pct:(p.bassa!==undefined?p.bassa:p.media); if(v!==undefined&&v!==null) risparmioPctState[i].pct=num(v); });
     renderSpecKpiForm();
     SPEC_KPIS.forEach(k=>{ const cb=document.getElementById("spec_"+k.id); if(!cb) return;
       let v=payload.ui?.["spec_"+k.id];
@@ -1779,7 +1784,7 @@
     renderSpecKpiForm();
     const fe=document.getElementById("fileImportExcel"), fj=document.getElementById("fileImportJson"); if(fe) fe.value=""; if(fj) fj.value="";
     interventiState.forEach((s,i)=>{ Object.assign(s,{eff:"N.A.",intervento:false,opportunita:"",investimento:0,kwp:0,prod:1150,autoc:70,pzonale:0,complessita:3,tipo_override:INTERVENTI_STANDARD[i]?.area==="Altro"?"":null}); });
-    INTERVENTI_STANDARD.forEach((it,i)=>{ const b=defaultPctBassaForArea(it.area); risparmioPctState[i].bassa=b; risparmioPctState[i].media=defaultPctMediaFromBassa(b); });
+    INTERVENTI_STANDARD.forEach((it,i)=>{ risparmioPctState[i].pct=defaultPctBassaForArea(it.area); });
     renderInterventiForm(); renderRisparmiPctForm(); updateDescrizioneAteco(); updateClimaFromRegione(); render();
   }
   function saveProject(){

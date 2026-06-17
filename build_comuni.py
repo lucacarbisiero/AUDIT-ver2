@@ -1,67 +1,59 @@
 # -*- coding: utf-8 -*-
-"""Genera comuni_gg.js dalla tabella gradi giorno del DPR 412/93.
-Uso: python build_comuni.py  (richiede il PDF DPR412 nel percorso indicato)."""
-import fitz, json, collections, io
+"""Genera comuni_gg.js (province ATTUALI + gradi giorno/zona climatica DPR 412/93).
 
-PDF = r"C:\Users\LucaCarbisiero\OneDrive - FBC Italia srl\ESCO FBC\01_Diagnosi Energetiche\DPR4121993_P01_merged.pdf"
+Fonte: dataset open "Italy.Core" (SQLite, auto-aggiornato da ISTAT; campi zona_climatica
+e gradi_giorno dal DPR 412/93 - valori ENEA). Repo: github.com/N0T-A-NUMB3R/Italy.Core
 
-# Provincia -> (nome, regione)  [codici DPR 412/1993, 96 province]
-PROV = {
- "TO":("Torino","Piemonte"),"VC":("Vercelli","Piemonte"),"NO":("Novara","Piemonte"),"CN":("Cuneo","Piemonte"),
- "AT":("Asti","Piemonte"),"AL":("Alessandria","Piemonte"),"BI":("Biella","Piemonte"),
- "AO":("Aosta","Valle d'Aosta"),
- "VA":("Varese","Lombardia"),"CO":("Como","Lombardia"),"SO":("Sondrio","Lombardia"),"MI":("Milano","Lombardia"),
- "BG":("Bergamo","Lombardia"),"BS":("Brescia","Lombardia"),"PV":("Pavia","Lombardia"),"CR":("Cremona","Lombardia"),"MN":("Mantova","Lombardia"),
- "BZ":("Bolzano","Trentino-Alto Adige"),"TN":("Trento","Trentino-Alto Adige"),
- "VR":("Verona","Veneto"),"VI":("Vicenza","Veneto"),"BL":("Belluno","Veneto"),"TV":("Treviso","Veneto"),
- "VE":("Venezia","Veneto"),"PD":("Padova","Veneto"),"RO":("Rovigo","Veneto"),
- "UD":("Udine","Friuli-Venezia Giulia"),"GO":("Gorizia","Friuli-Venezia Giulia"),"TS":("Trieste","Friuli-Venezia Giulia"),"PN":("Pordenone","Friuli-Venezia Giulia"),
- "IM":("Imperia","Liguria"),"SV":("Savona","Liguria"),"GE":("Genova","Liguria"),"SP":("La Spezia","Liguria"),
- "PC":("Piacenza","Emilia-Romagna"),"PR":("Parma","Emilia-Romagna"),"RE":("Reggio Emilia","Emilia-Romagna"),"MO":("Modena","Emilia-Romagna"),
- "BO":("Bologna","Emilia-Romagna"),"FE":("Ferrara","Emilia-Romagna"),"RA":("Ravenna","Emilia-Romagna"),"FO":("Forlì-Cesena","Emilia-Romagna"),
- "MS":("Massa-Carrara","Toscana"),"LU":("Lucca","Toscana"),"PT":("Pistoia","Toscana"),"FI":("Firenze","Toscana"),
- "LI":("Livorno","Toscana"),"PI":("Pisa","Toscana"),"AR":("Arezzo","Toscana"),"SI":("Siena","Toscana"),"GR":("Grosseto","Toscana"),
- "PG":("Perugia","Umbria"),"TR":("Terni","Umbria"),
- "PS":("Pesaro e Urbino","Marche"),"AN":("Ancona","Marche"),"MC":("Macerata","Marche"),"AP":("Ascoli Piceno","Marche"),
- "VT":("Viterbo","Lazio"),"RI":("Rieti","Lazio"),"RM":("Roma","Lazio"),"LT":("Latina","Lazio"),"FR":("Frosinone","Lazio"),
- "AQ":("L'Aquila","Abruzzo"),"TE":("Teramo","Abruzzo"),"PE":("Pescara","Abruzzo"),"CH":("Chieti","Abruzzo"),
- "CB":("Campobasso","Molise"),"IS":("Isernia","Molise"),
- "CE":("Caserta","Campania"),"BN":("Benevento","Campania"),"NA":("Napoli","Campania"),"AV":("Avellino","Campania"),"SA":("Salerno","Campania"),
- "FG":("Foggia","Puglia"),"BA":("Bari","Puglia"),"TA":("Taranto","Puglia"),"BR":("Brindisi","Puglia"),"LE":("Lecce","Puglia"),
- "PZ":("Potenza","Basilicata"),"MT":("Matera","Basilicata"),
- "CS":("Cosenza","Calabria"),"CZ":("Catanzaro","Calabria"),"RC":("Reggio Calabria","Calabria"),
- "TP":("Trapani","Sicilia"),"PA":("Palermo","Sicilia"),"ME":("Messina","Sicilia"),"AG":("Agrigento","Sicilia"),
- "CL":("Caltanissetta","Sicilia"),"EN":("Enna","Sicilia"),"CT":("Catania","Sicilia"),"RG":("Ragusa","Sicilia"),"SR":("Siracusa","Sicilia"),
- "SS":("Sassari","Sardegna"),"NU":("Nuoro","Sardegna"),"CA":("Cagliari","Sardegna"),"OR":("Oristano","Sardegna"),
+Uso:  python build_comuni.py
+- Se manca 'italy.db' nella cartella, viene scaricato dal repo.
+- Scrive 'comuni_gg.js' con window.PROVINCE_IT e window.COMUNI_GG.
+"""
+import sqlite3, json, io, os, urllib.request
+
+DB = "italy.db"
+DB_URL = "https://github.com/N0T-A-NUMB3R/Italy.Core/raw/HEAD/src/Italy.Core/data/italy.db"
+
+# Nomi regione esattamente come nel menu a tendina dell'app (index.html)
+APP_REGIONS = {
+    "Abruzzo","Basilicata","Calabria","Campania","Emilia-Romagna","Friuli-Venezia Giulia",
+    "Lazio","Liguria","Lombardia","Marche","Molise","Piemonte","Puglia","Sardegna","Sicilia",
+    "Toscana","Trentino-Alto Adige","Umbria","Valle d'Aosta","Veneto"
 }
 
-d = fitz.open(PDF)
-lines=[]
-for pg in d:
-    for ln in pg.get_text().split("\n"):
-        s=ln.strip()
-        if s: lines.append(s)
+def main():
+    if not os.path.exists(DB):
+        print("Scarico italy.db (~20 MB)...")
+        urllib.request.urlretrieve(DB_URL, DB)
 
-recs=collections.defaultdict(list)
-i=0; n=len(lines)
-while i<n:
-    tok=lines[i]
-    if tok in PROV and i+4<n:
-        z,gg,alt,com=lines[i+1],lines[i+2],lines[i+3],lines[i+4]
-        if len(z)==1 and z in "ABCDEF" and gg.isdigit() and alt.lstrip("-").isdigit():
-            recs[tok].append([com.strip(), int(gg)]); i+=5; continue
-    i+=1
+    con = sqlite3.connect(DB)
+    rows = con.execute("""
+        select denominazione, sigla_provincia, nome_provincia, nome_regione, gradi_giorno
+        from comuni
+        where is_attivo=1 and gradi_giorno is not null and sigla_provincia is not null
+    """).fetchall()
 
-# ordina i comuni alfabeticamente per provincia
-out={code:sorted(v, key=lambda x:x[0]) for code,v in recs.items()}
-tot=sum(len(v) for v in out.values())
-unknown=[c for c in recs if c not in PROV]
-print("comuni:",tot,"province:",len(out),"sconosciute:",unknown)
+    prov, com = {}, {}
+    for den, sig, pnome, reg, gg in rows:
+        region = reg.split("/")[0].strip()      # "Trentino-Alto Adige/Suedtirol" -> "Trentino-Alto Adige"
+        pn = pnome.split("/")[0].strip()
+        prov.setdefault(sig, {"n": pn, "r": region})
+        com.setdefault(sig, []).append([den, int(gg)])
 
-prov_out={c:{"n":PROV[c][0],"r":PROV[c][1]} for c in sorted(out.keys())}
+    for s in com:
+        com[s].sort(key=lambda x: x[0])
+    prov = {s: prov[s] for s in sorted(prov)}
+    com = {s: com[s] for s in sorted(com)}
 
-with io.open("comuni_gg.js","w",encoding="utf-8") as f:
-    f.write("/* Gradi giorno per comune — fonte: DPR 412/1993 (allegato A). Generato da build_comuni.py */\n")
-    f.write("window.PROVINCE_IT = "+json.dumps(prov_out, ensure_ascii=False)+";\n")
-    f.write("window.COMUNI_GG = "+json.dumps(out, ensure_ascii=False)+";\n")
-print("scritto comuni_gg.js")
+    bad = {v["r"] for v in prov.values()} - APP_REGIONS
+    assert not bad, f"Regioni non allineate al menu app: {bad}"
+
+    with io.open("comuni_gg.js", "w", encoding="utf-8") as f:
+        f.write("/* Gradi giorno e zona climatica per comune (DPR 412/93, valori ENEA) con province attuali.\n"
+                "   Fonte: ISTAT via dataset Italy.Core. Rigenerare con build_comuni.py */\n")
+        f.write("window.PROVINCE_IT = " + json.dumps(prov, ensure_ascii=False) + ";\n")
+        f.write("window.COMUNI_GG = " + json.dumps(com, ensure_ascii=False) + ";\n")
+
+    print(f"OK: {len(prov)} province, {sum(len(v) for v in com.values())} comuni -> comuni_gg.js")
+
+if __name__ == "__main__":
+    main()
